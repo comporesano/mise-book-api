@@ -1,3 +1,4 @@
+import logging
 from datetime import date, time
 
 from sqlalchemy import select
@@ -5,6 +6,8 @@ from sqlalchemy import select
 from app.core.exceptions import BookingNotFoundError, SlotAlreadyTakenError
 from app.models import Booking, BookingStatus
 from app.services.repository.base import BaseRepository
+
+logger = logging.getLogger(__name__)
 
 
 class BookingRepository(BaseRepository[Booking]):
@@ -34,14 +37,23 @@ class BookingRepository(BaseRepository[Booking]):
         """Создаёт бронь; если слот занят активной бронью - SlotAlreadyTakenError."""
         existing = await self.get_active_by_slot(booking_date, booking_time)
         if existing is not None:
+            logger.warning(
+                "Slot conflict: %s %s (already booked, id=%s)",
+                booking_date, booking_time, existing.id,
+            )
             raise SlotAlreadyTakenError
-        return await self.create(
+        booking = await self.create(
             name=name,
             phone=phone,
             booking_date=booking_date,
             booking_time=booking_time,
             guests=guests,
         )
+        logger.info(
+            "Booking created: id=%s, slot=%s %s, guests=%s",
+            booking.id, booking_date, booking_time, guests,
+        )
+        return booking
 
     async def get_booking(self, booking_id: int) -> Booking:
         """Бронь по id; если не найдена - BookingNotFoundError."""
@@ -55,4 +67,5 @@ class BookingRepository(BaseRepository[Booking]):
         cancelled = await self.update(booking_id, status=BookingStatus.cancelled)
         if cancelled is None:
             raise BookingNotFoundError
+        logger.info("Booking cancelled: id=%s", booking_id)
         return cancelled
