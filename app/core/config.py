@@ -1,22 +1,33 @@
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Настройки приложения. Читаются из переменных окружения и .env."""
-
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    """Базовый конфиг всего приложения."""
 
     app_name: str = "Booking API for MISE"
     debug: bool = False
 
-    # PostgreSQL
-    postgres_user: str = "booking"
-    postgres_password: str = "booking"
-    postgres_db: str = "bookings"
-    postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    # База данных: значения читаются из переменных окружения DB_* / .env
+    db_user: str = "booking"
+    db_passwd: str = "booking"
+    db_name: str = "bookings"
+    db_host: str = "localhost"
+    db_port: int = 5432
 
-    database_url: str = "postgresql+asyncpg://booking:booking@localhost:5432/bookings"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.db_user}:{self.db_passwd}"
+            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        )
 
 
 settings = Settings()
