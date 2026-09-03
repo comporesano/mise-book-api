@@ -5,7 +5,8 @@ from sqlalchemy import Date, Index, Integer, String, Time
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database import Base
+from app.core.database import BaseModel
+from app.core.utilities.db import mixins
 
 
 class BookingStatus(str, Enum):
@@ -15,7 +16,7 @@ class BookingStatus(str, Enum):
     cancelled = "cancelled"
 
 
-class Booking(Base):
+class Booking(BaseModel, mixins.TimestampMixin):
     """Бронь столика в ресторане."""
 
     __tablename__ = "bookings"
@@ -32,6 +33,5 @@ class Booking(Base):
     )
 
     __table_args__ = (
-        # Частый запрос: поиск активной брони на конкретные дату и время (проверка занятости слота)
         Index("ix_bookings_date_time", "booking_date", "booking_time"),
     )

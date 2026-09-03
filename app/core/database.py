@@ -6,7 +6,7 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
 
 
-class Base(DeclarativeBase):
+class BaseModel(DeclarativeBase):
     """Базовый класс для ORM-моделей приложения."""
 
 
