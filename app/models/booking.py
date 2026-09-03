@@ -21,7 +21,6 @@ class Booking(BaseModel, mixins.TimestampMixin):
 
     __tablename__ = "bookings"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100))
     phone: Mapped[str] = mapped_column(String(20))
     booking_date: Mapped[date] = mapped_column(Date)
