@@ -1,13 +1,15 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import Integer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import settings
 
 
-class Base(DeclarativeBase):
+class BaseModel(DeclarativeBase):
     """Базовый класс для ORM-моделей приложения."""
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
 
 engine = create_async_engine(settings.database_url, echo=settings.debug)

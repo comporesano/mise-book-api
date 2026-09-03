@@ -21,24 +21,33 @@ REST API для онлайн-бронирования столиков в рес
 
 | Метод | Путь | Описание | Успешный ответ |
 |---|---|---|---|
-| `POST` | `/bookings` | Создать бронь | `201` - объект брони со статусом `active` |
-| `GET` | `/bookings` | Список броней, опциональный фильтр `?date=YYYY-MM-DD` | `200` - список броней |
-| `GET` | `/bookings/{id}` | Получить бронь по id | `200` - объект брони |
-| `DELETE` | `/bookings/{id}` | Отменить бронь | `200` - объект брони со статусом `cancelled` |
+| `POST` | `/api/v1/bookings` | Создать бронь | `201` - объект брони со статусом `active` |
+| `GET` | `/api/v1/bookings` | Список броней, опциональный фильтр `?date=YYYY-MM-DD` | `200` - список броней |
+| `GET` | `/api/v1/bookings/{id}` | Получить бронь по id | `200` - объект брони |
+| `DELETE` | `/api/v1/bookings/{id}` | Отменить бронь | `200` - объект брони со статусом `cancelled` |
 
-## Объект брони
+## Формат ответов
+
+Успешные ответы приходят в обёртке: `status`, `message`, `data` (полезная нагрузка) и `status_code`. Объект брони лежит в `data`:
 
 ```json
 {
-  "id": 1,
-  "name": "Иван Петров",
-  "phone": "+79991234567",
-  "booking_date": "2026-09-20",
-  "booking_time": "19:00",
-  "guests": 4,
-  "status": "active"
+  "status": "success",
+  "message": "Success",
+  "data": {
+    "id": 1,
+    "name": "Иван Петров",
+    "phone": "+79991234567",
+    "booking_date": "2026-09-20",
+    "booking_time": "19:00",
+    "guests": 4,
+    "status": "active"
+  },
+  "status_code": 201
 }
 ```
+
+Бизнес-ошибки возвращаются в формате `{"detail": "..."}`.
 
 ## Валидация
 
@@ -108,7 +117,7 @@ uv run pytest -v
 
 ```bash
 # Создать бронь
-curl -X POST http://127.0.0.1:8000/bookings \
+curl -X POST http://127.0.0.1:8000/api/v1/bookings \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Иван Петров",
@@ -119,13 +128,13 @@ curl -X POST http://127.0.0.1:8000/bookings \
   }'
 
 # Список броней на конкретную дату
-curl "http://127.0.0.1:8000/bookings?date=2026-09-20"
+curl "http://127.0.0.1:8000/api/v1/bookings?date=2026-09-20"
 
 # Получить бронь по id
-curl http://127.0.0.1:8000/bookings/1
+curl http://127.0.0.1:8000/api/v1/bookings/1
 
 # Отменить бронь
-curl -X DELETE http://127.0.0.1:8000/bookings/1
+curl -X DELETE http://127.0.0.1:8000/api/v1/bookings/1
 ```
 
 ## Структура проекта
@@ -135,16 +144,24 @@ curl -X DELETE http://127.0.0.1:8000/bookings/1
 ├── app/
 │   ├── main.py                 # точка входа FastAPI, подключение роутов
 │   ├── api/
+│   │   ├── core.py             # корневой роутер /api/v1
 │   │   └── bookings.py         # роуты /bookings - тонкий слой, без бизнес-логики
 │   ├── core/
 │   │   ├── config.py           # настройки из переменных окружения (.env)
-│   │   └── database.py         # async-движок и сессии SQLAlchemy
+│   │   ├── constants.py        # бизнес-константы (слоты, глубина брони)
+│   │   ├── database.py         # async-движок и сессии SQLAlchemy
+│   │   ├── exceptions.py       # бизнес-исключения
+│   │   └── utilities/
+│   │       ├── api/classes.py  # обёртка ответов APIResponse
+│   │       └── db/mixins.py    # TimestampMixin (created_at/updated_at)
 │   ├── models/
 │   │   └── booking.py          # ORM-модель брони
 │   ├── schemas/
-│   │   └── booking.py          # Pydantic-схемы + валидация полей
+│   │   └── booking/            # Pydantic-схемы + валидация полей
 │   └── services/
-│       └── booking_service.py  # бизнес-логика: проверка занятости слота, отмена
+│       └── repository/
+│           ├── base.py         # generic-репозиторий: CRUD, фильтры, bulk
+│           └── booking.py      # репозиторий броней + бизнес-правила
 ├── tests/
 │   ├── conftest.py             # фикстуры: тестовая БД, httpx.AsyncClient
 │   └── test_bookings.py        # тесты эндпоинтов
@@ -166,7 +183,9 @@ curl -X DELETE http://127.0.0.1:8000/bookings/1
 
 - **uv вместо pip** - зависимости и версии зафиксированы в `pyproject.toml` + `uv.lock`, окружение воспроизводится одной командой `uv sync`.
 - **PostgreSQL через SQLAlchemy 2.0 (async) + asyncpg** - как в боевом проекте; БД поднимается одной командой `docker compose up -d db`, данные хранятся в named-volume.
-- **Слои «роуты → сервисы → модели»** - роуты остаются тонкими, вся бизнес-логика живёт в сервисах, поэтому её легко тестировать отдельно от HTTP.
+- **Слои «роуты → репозитории → модели»** - роуты остаются тонкими, бизнес-правила (проверка слота, мягкая отмена) живут в репозитории, поэтому их легко тестировать отдельно от HTTP.
 - **Проверка занятости слота (409)** - слоты строго почасовые, поэтому конфликт - это существующая активная бронь на ту же дату и то же время.
 - **Отмена без удаления** - `DELETE` переводит бронь в `cancelled`, история не теряется.
 - **Alembic для миграций** - схема БД версионируется: `uv run alembic revision --autogenerate` генерирует миграцию из моделей, `uv run alembic upgrade head` применяет её.
+- **Версия API и обёртка ответов** - эндпоинты живут под `/api/v1`; успешные ответы в обёртке `{status, message, data, status_code}`, бизнес-ошибки в формате `{"detail": "..."}`.
+- **Тесты** - 20 тестов через httpx.AsyncClient покрывают весь контракт API: 201/422/404/409/200, фильтр по дате, отмену и освобождение слота.
