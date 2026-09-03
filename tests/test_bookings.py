@@ -1,6 +1,10 @@
 from datetime import date, timedelta
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.main import app
+from app.services.repository.booking import BookingRepository
 
 API = "/api/v1/bookings"
 
@@ -114,3 +118,23 @@ async def test_booking_still_listed_after_cancel(client):
     assert resp.status_code == 200
     assert len(resp.json()["data"]) == 1
     assert resp.json()["data"][0]["status"] == "cancelled"
+
+
+async def test_unhandled_error_returns_500(monkeypatch):
+    """Непредвиденные ошибки глушатся: 500 + {"detail": ...} без traceback наружу.
+
+    Starlette рейзит исключение повторно даже после отправки 500-ответа
+    (чтобы сервер мог его залогировать), поэтому для этого теста нужен
+    транспорт с raise_app_exceptions=False - иначе httpx кинет ошибку в тест.
+    """
+
+    async def boom(self, *args, **kwargs):
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr(BookingRepository, "get_all", boom)
+
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get(API)
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "Internal server error"}
